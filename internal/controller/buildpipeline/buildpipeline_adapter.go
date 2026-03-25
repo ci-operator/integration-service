@@ -32,6 +32,7 @@ import (
 	applicationapiv1alpha1 "github.com/konflux-ci/application-api/api/v1alpha1"
 	"github.com/konflux-ci/integration-service/api/v1beta2"
 	"github.com/konflux-ci/integration-service/gitops"
+	"github.com/konflux-ci/integration-service/pkg/tracing"
 	h "github.com/konflux-ci/integration-service/helpers"
 	"github.com/konflux-ci/integration-service/loader"
 	intgteststat "github.com/konflux-ci/integration-service/pkg/integrationteststatus"
@@ -187,6 +188,9 @@ func (a *Adapter) EnsureSnapshotExists() (result controller.OperationResult, err
 			"pipelineRun.Name", a.pipelineRun.Name)
 		return controller.RequeueWithError(err)
 	}
+
+	// Emit timing spans for the build PipelineRun if not already emitted
+	a.emitBuildTimingSpans()
 
 	canRemoveFinalizer = true
 	return controller.ContinueProcessing()
@@ -599,6 +603,11 @@ func (a *Adapter) prepareSnapshotForPipelineRun(pipelineRun *tektonv1.PipelineRu
 
 	prefixes := []string{gitops.BuildPipelineRunPrefix, gitops.TestLabelPrefix, gitops.CustomLabelPrefix, gitops.ReleaseLabelPrefix}
 	gitops.CopySnapshotLabelsAndAnnotations(application, snapshot, a.component.Name, &pipelineRun.ObjectMeta, prefixes)
+
+	// Propagate span context from build PipelineRun to Snapshot for distributed tracing
+	if tp, found := pipelineRun.Annotations[tektonconsts.SpanContextAnnotation]; found && tp != "" {
+		snapshot.Annotations[tektonconsts.SpanContextAnnotation] = tp
+	}
 
 	snapshot.Labels[gitops.BuildPipelineRunNameLabel] = pipelineRun.Name
 	if pipelineRun.Status.CompletionTime != nil {
@@ -1169,4 +1178,32 @@ func (a *Adapter) IsLatestBuildPipelineRunInComponentWithPRGroupHash(buildPlr *t
 
 	a.logger.Info(fmt.Sprintf("The build pipelineRun %s/%s with pr group %s is not the latest for its component, skipped", buildPlr.Namespace, buildPlr.Name, prGroupName))
 	return false, nil
+}
+
+// emitBuildTimingSpans emits timing spans for the build PipelineRun if not already emitted
+func (a *Adapter) emitBuildTimingSpans() {
+	// Check if timing spans have already been emitted (using UID for canonical object identity)
+	emittedKey := tektonconsts.TimingEmittedAnnotation + "-" + string(a.pipelineRun.UID)
+	if _, found := a.pipelineRun.Annotations[emittedKey]; found {
+		return // Already emitted
+	}
+
+	// Get span context from the PipelineRun
+	tp := a.pipelineRun.Annotations[tektonconsts.SpanContextAnnotation]
+
+	// Emit timing spans
+	if tracing.EmitTimingSpans(a.context, a.pipelineRun, "build", tp) {
+		// Mark as emitted to avoid duplicates on subsequent reconciles
+		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			var err error
+			a.pipelineRun, err = a.loader.GetPipelineRun(a.context, a.client, a.pipelineRun.Name, a.pipelineRun.Namespace)
+			if err != nil {
+				return err
+			}
+			return tekton.AnnotateBuildPipelineRun(a.context, a.pipelineRun, emittedKey, "true", a.client)
+		})
+		if err != nil {
+			a.logger.Error(err, "Failed to mark build timing spans as emitted")
+		}
+	}
 }

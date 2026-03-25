@@ -216,9 +216,8 @@ func (a *Adapter) annotateIntegrationPipelineRunLogURL(ctx context.Context, adap
 //   - Component/Group snapshots: Parented under delivery trace from build PLR
 //   - Override snapshots: Emitted without parent trace (still useful for timing metrics)
 func (a *Adapter) emitTestTimingSpans() {
-	// Check if timing spans have already been emitted (using UID for canonical object identity)
-	emittedKey := tektonconsts.TimingEmittedAnnotation + "-" + string(a.pipelineRun.UID)
-	if _, found := a.pipelineRun.Annotations[emittedKey]; found {
+	// Check if timing spans have already been emitted
+	if _, found := a.pipelineRun.Annotations[tektonconsts.TimingEmittedAnnotation]; found {
 		return // Already emitted
 	}
 
@@ -229,7 +228,7 @@ func (a *Adapter) emitTestTimingSpans() {
 	}
 
 	// Emit timing spans
-	emitted := tracing.EmitTimingSpans(a.context, a.pipelineRun, "test", tp)
+	emitted := tracing.EmitTimingSpans(a.pipelineRun, tektonconsts.PipelineRunTestType, tp)
 
 	if emitted {
 		// Mark as emitted to avoid duplicates on subsequent reconciles
@@ -243,7 +242,7 @@ func (a *Adapter) emitTestTimingSpans() {
 			if a.pipelineRun.Annotations == nil {
 				a.pipelineRun.Annotations = make(map[string]string)
 			}
-			a.pipelineRun.Annotations[emittedKey] = "true"
+			a.pipelineRun.Annotations[tektonconsts.TimingEmittedAnnotation] = "true"
 			return a.client.Patch(a.context, a.pipelineRun, patch)
 		})
 		if err != nil {

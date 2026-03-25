@@ -234,7 +234,7 @@ var _ = Describe("Timing Spans", func() {
 				},
 				Status: tektonv1.PipelineRunStatus{},
 			}
-			result := tracing.EmitTimingSpans(context.Background(), pr, "test", "")
+			result := tracing.EmitTimingSpans(pr, "test", "")
 			Expect(result).To(BeFalse())
 			Expect(exporter.GetSpans()).To(BeEmpty())
 		})
@@ -252,7 +252,7 @@ var _ = Describe("Timing Spans", func() {
 					},
 				},
 			}
-			result := tracing.EmitTimingSpans(context.Background(), pr, "test", "")
+			result := tracing.EmitTimingSpans(pr, "test", "")
 			Expect(result).To(BeTrue())
 
 			spans := exporter.GetSpans()
@@ -275,7 +275,7 @@ var _ = Describe("Timing Spans", func() {
 					},
 				},
 			}
-			result := tracing.EmitTimingSpans(context.Background(), pr, "test", "")
+			result := tracing.EmitTimingSpans(pr, "test", "")
 			Expect(result).To(BeTrue())
 
 			spans := exporter.GetSpans()
@@ -297,7 +297,7 @@ var _ = Describe("Timing Spans", func() {
 					},
 				},
 			}
-			result := tracing.EmitTimingSpans(context.Background(), pr, "test", "")
+			result := tracing.EmitTimingSpans(pr, "test", "")
 			Expect(result).To(BeTrue())
 			Expect(exporter.GetSpans()).To(HaveLen(1))
 		})
@@ -316,7 +316,7 @@ var _ = Describe("Timing Spans", func() {
 				},
 			}
 			validSpanContext := "{\"traceparent\":\"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01\"}"
-			result := tracing.EmitTimingSpans(context.Background(), pr, "test", validSpanContext)
+			result := tracing.EmitTimingSpans(pr, "test", validSpanContext)
 			Expect(result).To(BeTrue())
 
 			spans := exporter.GetSpans()

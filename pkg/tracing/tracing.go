@@ -116,21 +116,10 @@ func New(ctx context.Context) (*TracerProvider, error) {
 	}, nil
 }
 
-// Tracer returns a tracer from the provider
-func (tp *TracerProvider) Tracer() trace.Tracer {
-	return tp.provider.Tracer(TracerName)
-}
-
 // Shutdown shuts down the tracer provider
 func (tp *TracerProvider) Shutdown(ctx context.Context) error {
 	if tp.shutdown != nil {
 		return tp.shutdown(ctx)
 	}
 	return nil
-}
-
-// IsEnabled returns true if tracing is enabled (not using noop provider)
-func (tp *TracerProvider) IsEnabled() bool {
-	_, ok := tp.provider.(*sdktrace.TracerProvider)
-	return ok
 }

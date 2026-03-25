@@ -22,6 +22,7 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 	"go.opentelemetry.io/otel/trace"
 	"knative.dev/pkg/apis"
@@ -130,7 +131,12 @@ func EmitExecuteDuration(ctx context.Context, pr *tektonv1.PipelineRun, phase st
 // The spans are parented under the delivery trace context if a valid span context is provided.
 // Returns true if spans were emitted (even if to a noop provider), false if the PipelineRun
 // doesn't have the required timestamps.
-func EmitTimingSpans(ctx context.Context, pr *tektonv1.PipelineRun, phase string, spanContext string) bool {
+func EmitTimingSpans(pr *tektonv1.PipelineRun, phase string, spanContext string) bool {
+	// Skip if tracing is not configured
+	if _, ok := otel.GetTracerProvider().(*sdktrace.TracerProvider); !ok {
+		return false
+	}
+
 	// Get parent context from span context
 	parentCtx, ok := CtxFromSpanContext(spanContext)
 	if !ok {

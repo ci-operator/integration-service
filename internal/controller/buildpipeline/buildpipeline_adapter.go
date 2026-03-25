@@ -1182,9 +1182,8 @@ func (a *Adapter) IsLatestBuildPipelineRunInComponentWithPRGroupHash(buildPlr *t
 
 // emitBuildTimingSpans emits timing spans for the build PipelineRun if not already emitted
 func (a *Adapter) emitBuildTimingSpans() {
-	// Check if timing spans have already been emitted (using UID for canonical object identity)
-	emittedKey := tektonconsts.TimingEmittedAnnotation + "-" + string(a.pipelineRun.UID)
-	if _, found := a.pipelineRun.Annotations[emittedKey]; found {
+	// Check if timing spans have already been emitted
+	if _, found := a.pipelineRun.Annotations[tektonconsts.TimingEmittedAnnotation]; found {
 		return // Already emitted
 	}
 
@@ -1192,7 +1191,7 @@ func (a *Adapter) emitBuildTimingSpans() {
 	tp := a.pipelineRun.Annotations[tektonconsts.SpanContextAnnotation]
 
 	// Emit timing spans
-	if tracing.EmitTimingSpans(a.context, a.pipelineRun, "build", tp) {
+	if tracing.EmitTimingSpans(a.pipelineRun, tektonconsts.PipelineRunBuildType, tp) {
 		// Mark as emitted to avoid duplicates on subsequent reconciles
 		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			var err error
@@ -1200,7 +1199,7 @@ func (a *Adapter) emitBuildTimingSpans() {
 			if err != nil {
 				return err
 			}
-			return tekton.AnnotateBuildPipelineRun(a.context, a.pipelineRun, emittedKey, "true", a.client)
+			return tekton.AnnotateBuildPipelineRun(a.context, a.pipelineRun, tektonconsts.TimingEmittedAnnotation, "true", a.client)
 		})
 		if err != nil {
 			a.logger.Error(err, "Failed to mark build timing spans as emitted")

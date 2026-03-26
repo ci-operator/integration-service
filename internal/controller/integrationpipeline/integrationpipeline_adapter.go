@@ -26,6 +26,7 @@ import (
 	h "github.com/konflux-ci/integration-service/helpers"
 	"github.com/konflux-ci/integration-service/loader"
 	intgteststat "github.com/konflux-ci/integration-service/pkg/integrationteststatus"
+	"github.com/konflux-ci/integration-service/pkg/tracing"
 	"github.com/konflux-ci/integration-service/status"
 
 	tektonconsts "github.com/konflux-ci/integration-service/tekton/consts"
@@ -107,6 +108,11 @@ func (a *Adapter) EnsureStatusReportedInSnapshot() (controller.OperationResult, 
 	if err != nil {
 		a.logger.Error(err, "Failed to update pipeline status in snapshot")
 		return controller.RequeueWithError(fmt.Errorf("failed to update test status in snapshot: %w", err))
+	}
+
+	// Emit timing spans for the integration test PipelineRun if finished
+	if h.HasPipelineRunFinished(a.pipelineRun) {
+		a.emitTestTimingSpans()
 	}
 
 	// Remove the finalizer from Integration PLRs if the snapshot is not group or component type and its PLR has finished
@@ -203,4 +209,44 @@ func (a *Adapter) annotateIntegrationPipelineRunLogURL(ctx context.Context, adap
 		}
 		return err
 	})
+}
+
+// emitTestTimingSpans emits timing spans for the integration test PipelineRun if not already emitted.
+// Works for any snapshot type:
+//   - Component/Group snapshots: Parented under delivery trace from build PLR
+//   - Override snapshots: Emitted without parent trace (still useful for timing metrics)
+func (a *Adapter) emitTestTimingSpans() {
+	// Check if timing spans have already been emitted
+	if _, found := a.pipelineRun.Annotations[tektonconsts.TimingEmittedAnnotation]; found {
+		return // Already emitted
+	}
+
+	// Get span context from the snapshot (which got it from the build PLR)
+	tp := ""
+	if a.snapshot != nil && a.snapshot.Annotations != nil {
+		tp = a.snapshot.Annotations[tektonconsts.SpanContextAnnotation]
+	}
+
+	// Emit timing spans
+	emitted := tracing.EmitTimingSpans(a.pipelineRun, tektonconsts.PipelineRunTestType, tp)
+
+	if emitted {
+		// Mark as emitted to avoid duplicates on subsequent reconciles
+		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			var err error
+			a.pipelineRun, err = a.loader.GetPipelineRun(a.context, a.client, a.pipelineRun.Name, a.pipelineRun.Namespace)
+			if err != nil {
+				return err
+			}
+			patch := client.MergeFrom(a.pipelineRun.DeepCopy())
+			if a.pipelineRun.Annotations == nil {
+				a.pipelineRun.Annotations = make(map[string]string)
+			}
+			a.pipelineRun.Annotations[tektonconsts.TimingEmittedAnnotation] = "true"
+			return a.client.Patch(a.context, a.pipelineRun, patch)
+		})
+		if err != nil {
+			a.logger.Error(err, "Failed to mark test timing spans as emitted")
+		}
+	}
 }

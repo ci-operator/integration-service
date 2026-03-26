@@ -2,18 +2,19 @@ apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
   annotations:
-    build.appstudio.openshift.io/repo: https://github.com/konflux-ci/integration-service?rev={{revision}}
+    build.appstudio.openshift.io/repo: https://github.com/ci-operator/integration-service?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch == "main"
-  creationTimestamp:
+    pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch
+      == "distributed-tracing-dev"
+  creationTimestamp: null
   labels:
-    appstudio.openshift.io/application: integration-service
+    appstudio.openshift.io/application: konflux-tracing
     appstudio.openshift.io/component: integration-service
     pipelines.appstudio.openshift.io/type: build
   name: integration-service-on-push
-  namespace: rhtap-integration-tenant
+  namespace: trace-demo
 spec:
   params:
   - name: dockerfile
@@ -21,7 +22,7 @@ spec:
   - name: git-url
     value: '{{repo_url}}'
   - name: output-image
-    value: quay.io/redhat-user-workloads/rhtap-integration-tenant/integration-service/integration-service:{{revision}}
+    value: quay.io/rekonflux/trace-demo/integration-service:{{revision}}
   - name: path-context
     value: .
   - name: revision
@@ -313,6 +314,26 @@ spec:
         operator: in
         values:
         - "true"
+    - name: apply-tags
+      params:
+      - name: IMAGE_URL
+        value: $(tasks.build-image-index.results.IMAGE_URL)
+      - name: IMAGE_DIGEST
+        value: $(tasks.build-image-index.results.IMAGE_DIGEST)
+      - name: ADDITIONAL_TAGS
+        value:
+        - latest
+      runAfter:
+      - build-image-index
+      taskRef:
+        params:
+        - name: name
+          value: apply-tags
+        - name: bundle
+          value: quay.io/konflux-ci/tekton-catalog/task-apply-tags:0.3
+        - name: kind
+          value: task
+        resolver: bundles
     - name: build-source-image
       params:
       - name: BINARY_IMAGE

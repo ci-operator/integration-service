@@ -34,6 +34,9 @@ const (
 	// CustomLabelPrefix contains the prefix applied to custom user-defined labels and annotations.
 	CustomLabelPrefix = "custom.appstudio.openshift.io"
 
+	// TektonPrefix contains the prefix for annotations defined by the upstream Tekton project.
+	TektonPrefix = "tekton.dev"
+
 	// resource labels for snapshot, application and component
 	ResourceLabelSuffix = "appstudio.openshift.io"
 
@@ -131,6 +134,14 @@ const (
 
 	// PipelineRunChainsGitCommitParamName name of param repo chains commit
 	PipelineRunChainsGitCommitParamName = "CHAINS-GIT_COMMIT"
+
+	// SpanContextAnnotation is the annotation key for the serialized span context
+	// used for distributed tracing across the delivery pipeline
+	SpanContextAnnotation = TektonPrefix + "/pipelinerunSpanContext"
+
+	// TimingEmittedAnnotation is the annotation key base for marking that timing spans have been emitted.
+	// Uses "timing" to distinguish from Tekton's native execution tracing (TEP-0124).
+	TimingEmittedAnnotation = TektonPrefix + "/timingEmitted"
 )
 
 var (

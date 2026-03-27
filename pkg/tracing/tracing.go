@@ -68,9 +68,10 @@ func New(ctx context.Context) (*TracerProvider, error) {
 		}, nil
 	}
 
-	// Create OTLP exporter — the SDK reads OTEL_EXPORTER_OTLP_ENDPOINT
-	// from the environment, including scheme (http:// = plaintext, https:// = TLS)
-	exporter, err := otlptracegrpc.New(ctx)
+	// Create OTLP exporter with explicit endpoint URL for reliable scheme handling
+	exporter, err := otlptracegrpc.New(ctx,
+		otlptracegrpc.WithEndpointURL(os.Getenv(EnvOTLPEndpoint)),
+	)
 	if err != nil {
 		setupLog.Error(err, "failed to create OTLP exporter, using noop tracer provider")
 		return &TracerProvider{
